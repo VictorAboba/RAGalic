@@ -22,7 +22,15 @@ def llm_call(
                     },
                 }
             ),  # type: ignore
-            extra_body={"reasoning": {"enabled": True}},
+            extra_body={
+                "reasoning": {"enabled": True},
+                "provider": {
+                    "data_collection": "deny",
+                    "sort": {"by": "price", "partition": "none"},
+                    "preferred_min_throughput": {"p90": 30},
+                    "preferred_max_latency": {"p90": 3},
+                },
+            },
         )
 
     content = getattr(response.choices[0].message, "content", "N/A")
@@ -31,5 +39,8 @@ def llm_call(
         "reasoning",
         getattr(response.choices[0].message, "reasoning_details", "N/A"),
     )
+
+    if content is None and reasoning is not None:
+        content, reasoning = reasoning, content
 
     return content, reasoning

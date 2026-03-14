@@ -10,8 +10,8 @@ dependencies = [
     "easyocr>=1.7.2",
     "openai>=2.26.0",
     "qdrant-client[fastembed]>=1.17.0",
+    "rich>=14.3.3",
     "ruff>=0.15.5",
-    "scikit-learn>=1.8.0",
 ]
 
 

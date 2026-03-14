@@ -2,11 +2,14 @@ import re
 from pathlib import Path
 import warnings
 
+from rich.console import Console
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions, EasyOcrOptions
 from docling.datamodel.base_models import InputFormat
 
 warnings.filterwarnings("ignore")
+
+console = Console()
 
 transfer_pattern_left = re.compile(r"(\S)-\s+(\S)")
 transfer_pattern_right = re.compile(r"(\S)\s+-(\S)")
@@ -39,11 +42,14 @@ def fix_hyphenation(text: str) -> str:
 def chunk_document(path: Path) -> list[str]:
     document = converter.convert(path).document
     num_pages = document.num_pages()
-    print(f"Document has {num_pages} pages.")
+    console.print(f"Document has {num_pages} pages.", style="bold bright_black")
     chunks = []
     for page_num in range(1, num_pages + 1):
         page = document.export_to_markdown(page_no=page_num, indent=2)
-        print(f"Extracted page {page_num} with length {len(page)} characters.")
+        console.print(
+            f"Extracted page {page_num} with length {len(page)} characters.",
+            style="italic bright_black",
+        )
         page = fix_hyphenation(page)
         chunks.extend([page])
     return chunks

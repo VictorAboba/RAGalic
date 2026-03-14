@@ -39,10 +39,17 @@ class Chunk(BaseModel):
 
 class DescriptorOutput(BaseModel):
     description: str = Field(
-        default="No description available.",
-        description="A brief description of the content.",
+        description=(
+            "A concise technical summary (3-5 sentences) optimized for semantic vector search. "
+            "For individual pages: extract specific requirements, data, and facts. "
+            "For parent nodes: synthesize an overarching theme that aggregates all child nodes. "
+            "Avoid introductory phrases and maintain a professional tone."
+        ),
     )
     keywords: list[str] = Field(
-        default_factory=list,
-        description="A list of relevant keywords extracted from the content.",
+        description=(
+            "A list of 5-10 unique anchor terms in their base form for exact keyword search (BM25). "
+            "Must include technical specifics, abbreviations, synonyms, and English equivalents. "
+            "Focus on high-entropy tokens that distinguish this content from others."
+        ),
     )

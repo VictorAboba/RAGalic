@@ -1,10 +1,13 @@
 from pathlib import Path
 from typing import Optional
 
+from rich.console import Console
 from openai import OpenAI
 from qdrant_client import QdrantClient
 
 from .config import API_KEY, URL_BASE
+
+console = Console()
 
 lib_path = Path(__file__).parent
 
@@ -32,7 +35,9 @@ class RAGalicClient:
             self._client = QdrantClient(path=self.path, **self.kwargs)
             self._client.set_model("jinaai/jina-embeddings-v3")
             self._client.set_sparse_model("Qdrant/bm25")
-            print("Successfully connected to Qdrant.")
+            console.print(
+                "Successfully connected to Qdrant.", style="italic bright_black"
+            )
 
     def __enter__(self):
         self._setup_connection()
@@ -45,7 +50,7 @@ class RAGalicClient:
         if self._client:
             self._client.close()
             self._client = None
-            print("Connection closed.")
+            console.print("Connection closed.", style="italic bright_black")
 
     @property
     def client(self):
@@ -80,7 +85,9 @@ class OpenAIClient:
             self._client = OpenAI(
                 api_key=self.api_key, base_url=self.url_base, **self.kwargs
             )
-            print("Successfully connected to OpenAI.")
+            console.print(
+                "Successfully connected to OpenAI.", style="italic bright_black"
+            )
 
     def __enter__(self):
         self._setup_connection()
@@ -93,7 +100,7 @@ class OpenAIClient:
         if self._client:
             self._client.close()
             self._client = None
-            print("Connection closed.")
+            console.print("Connection closed.", style="italic bright_black")
 
     @property
     def client(self):

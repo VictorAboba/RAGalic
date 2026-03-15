@@ -9,6 +9,8 @@ from docling.datamodel.base_models import InputFormat
 
 warnings.filterwarnings("ignore")
 
+lib_path = Path(__file__).parent
+
 console = Console()
 
 transfer_pattern_left = re.compile(r"(\S)-\s+(\S)")
@@ -24,7 +26,9 @@ converter = DocumentConverter(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
                 do_table_structure=True,
-                ocr_options=EasyOcrOptions(model_storage_directory="./easyocr_models"),
+                ocr_options=EasyOcrOptions(
+                    model_storage_directory=str(lib_path / ".." / "./easyocr_models")
+                ),
             )
         )
     }

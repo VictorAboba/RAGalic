@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+from typing import Literal
 
 from rich.console import Console
 from qdrant_client.models import (
@@ -13,11 +14,14 @@ from qdrant_client.models import (
     FusionQuery,
     Fusion,
 )
+import numpy as np
 
 from .clients import RAGalicClient
 from .dataschemes import Chunk
 
 console = Console()
+
+BEAM_SEARCH_METHODS = Literal["fixed", "adaptive_with_knee"]
 
 
 def prepare_chunks(points: list[ScoredPoint]) -> list[Chunk]:
@@ -77,6 +81,11 @@ def find_roots(query: str, num_to_find: int = 3) -> list[ScoredPoint]:
     names = [f"{point.payload['file_name']}" for point in points]
     console.print(f"Found roots of files: {names}", style="italic purple")
     return points
+
+
+##################
+# BRANCH SEARCH
+##################
 
 
 def parent_vs_children(query: str, parent: ScoredPoint) -> list[ScoredPoint]:
@@ -169,12 +178,52 @@ def branch_search(query: str, num_roots: int = 3) -> list[Chunk]:
     return prepare_chunks(final_points)
 
 
+##################
+# BEAM SEARCH
+##################
+
+
 def check_ids(old_ids: list, new_ids: list):
     return set(old_ids) == set(new_ids)
 
 
+def cut_knee(points: list[ScoredPoint]) -> list[ScoredPoint]:
+    """
+    Отсекает 'хвост' результатов, находя точку максимального изгиба (колено)
+    на графике RRF-скоров.
+    """
+    n_points = len(points)
+
+    if n_points <= 2:
+        return points
+
+    scores = np.array([p.score for p in points])
+    x = np.arange(n_points)
+    y = scores
+
+    p1 = np.array([x[0], y[0]])
+    p2 = np.array([x[-1], y[-1]])
+
+    line_vec = p2 - p1
+    line_vec_norm = line_vec / np.linalg.norm(line_vec)
+
+    points_vec = np.vstack([x - p1[0], y - p1[1]]).T
+
+    scalar_product = (
+        points_vec[:, 0] * line_vec_norm[1] - points_vec[:, 1] * line_vec_norm[0]
+    )
+    distances = np.abs(scalar_product)
+
+    knee_idx = np.argmax(distances)
+
+    return points[: knee_idx + 1]
+
+
 def parents_vs_children(
-    query: str, parents: list[ScoredPoint], width: int = 3
+    query: str,
+    parents: list[ScoredPoint],
+    width: int = 3,
+    search_method: BEAM_SEARCH_METHODS = "fixed",
 ) -> list[ScoredPoint]:
     task_meta = {
         "file_names": [],
@@ -250,8 +299,19 @@ def parents_vs_children(
             children_to_eliminate.extend(point.payload["child_ids"])
             new_top_k.append(point)
 
-        if len(new_top_k) == width:
+        if search_method == "fixed" and len(new_top_k) >= width:
             break
+
+    if search_method == "adaptive_with_knee":
+        console.print(
+            f"Applying KNEE method to cut the tail of results. Initial candidates: {len(new_top_k)}",
+            style="italic bright_black",
+        )
+        new_top_k = cut_knee(new_top_k)
+        console.print(
+            f"Candidates after KNEE cut: {len(new_top_k)}",
+            style="italic bright_black",
+        )
 
     new_top_k_meta = [
         f"(ID: {point.payload['id']} | FILE: {point.payload['file_name']} | PAGES: {point.payload['page_start']} - {point.payload['page_end']})"
@@ -269,15 +329,59 @@ def parents_vs_children(
     return new_top_k
 
 
-def beam_search(query: str, beam_width: int = 3) -> list[Chunk]:
-    old_points = find_roots(query=query, num_to_find=beam_width)
+def beam_search(
+    query: str,
+    beam_width: int = 3,
+    search_method: BEAM_SEARCH_METHODS = "fixed",
+    max_num_roots: int = 20,
+) -> list[Chunk]:
+    if search_method == "fixed":
+        console.print(
+            f"Running BEAM SEARCH with [underline]FIXED[/underline] width: {beam_width}",
+            style="bold cyan",
+        )
+        old_points = find_roots(query=query, num_to_find=beam_width)
+    elif search_method == "adaptive_with_knee":
+        console.print(
+            f"Running BEAM SEARCH with [underline]ADAPTIVE[/underline] width using KNEE method",
+            style="bold cyan",
+        )
+        with RAGalicClient() as client:
+            root_filter = Filter(
+                must=[
+                    FieldCondition(key="parent_id", match=MatchValue(value=-1)),
+                ]
+            )
+            all_root_points_num = client.client.count(
+                collection_name="ragalic", count_filter=root_filter
+            ).count
+            all_root_points_num = min(all_root_points_num, max_num_roots)
+        console.print(
+            f"Total root points available: {all_root_points_num}",
+            style="italic bright_black",
+        )
+        old_points = find_roots(query=query, num_to_find=all_root_points_num)
+        console.print(
+            f"Initial root points retrieved: {len(old_points)}",
+            style="italic bright_black",
+        )
+        old_points = cut_knee(old_points)
+        console.print(
+            f"Root points after KNEE cut: {len(old_points)}",
+            style="italic bright_black",
+        )
     new_points = []
 
     old_ids = [point.payload["id"] for point in old_points]
     new_ids = []
     while not check_ids(old_ids=old_ids, new_ids=new_ids):
         old_ids = [point.payload["id"] for point in old_points]
-        new_points = parents_vs_children(query=query, parents=old_points)
+        new_points = parents_vs_children(
+            query=query,
+            parents=old_points,
+            width=beam_width,
+            search_method=search_method,
+        )
         old_points = new_points
         new_ids = [point.payload["id"] for point in new_points]
 
@@ -290,6 +394,7 @@ def beam_search(query: str, beam_width: int = 3) -> list[Chunk]:
 
 
 if __name__ == "__main__":
-    test_query = "Deep neural networks methods for cosmic rays modeling"
+    test_query = "Summarize the court's final ruling in case CFI 010/2024."
     branch_search(query=test_query)
     beam_search(query=test_query)
+    beam_search(query=test_query, search_method="adaptive_with_knee")

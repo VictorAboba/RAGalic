@@ -1,4 +1,4 @@
-# RAGalic
+# DRAG with KNEE
 
 Система Retrieval-Augmented Generation (RAG) для работы с PDF-документами с иерархической структурой и гибридным поиском.
 
@@ -14,7 +14,7 @@
 
 1. Клонируйте репозиторий и перейдите в директорию проекта:
 ```bash
-cd RAGalic
+cd DRAG-with-KNEE
 ```
 
 2. Установите зависимости через uv:
@@ -176,7 +176,7 @@ Beam Search поддерживает два режима работы:
 ## Структура проекта
 
 ```
-RAGalic/
+DRAG-with-KNEE/
 ├── rag_lib/
 │   ├── build_tree.py    # Построение дерева документа
 │   ├── chunking.py      # Извлечение текста из PDF
